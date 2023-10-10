@@ -1,0 +1,76 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    env:
+      FORCE_COLOR: 1
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Put back the git branch into git (Earthly uses it for tagging)
+        run: |
+          branch=""
+          if [ -n "$GITHUB_HEAD_REF" ]; then
+            branch="$GITHUB_HEAD_REF"
+          else
+            branch="${GITHUB_REF##*/}"
+          fi
+          git checkout -b "$branch" || true
+
+      - name: Get Earthly version from .tool-versions and set it as env var
+        id: earthly_version
+        run: |
+          EARTHLY_VERSION=$(grep earthly .tool-versions | cut -d ' ' -f 2)
+          echo "earthly_version=${EARTHLY_VERSION}" >> $GITHUB_OUTPUT
+          echo ${EARTHLY_VERSION}
+
+      - name: Download earthly
+        run: |
+          EARTHLY_VERSION=${{ steps.earthly_version.outputs.earthly_version }}
+          wget https://github.com/earthly/earthly/releases/download/v${EARTHLY_VERSION}/earthly-linux-amd64 -O /usr/local/bin/earthly
+          chmod +x /usr/local/bin/earthly
+
+      - name: Print Earthly version
+        run: earthly --version
+
+      - name: Determine version
+        id: version
+        run: |
+          case "${GITHUB_REF}" in
+          refs/tags/*)
+            VERSION=${GITHUB_REF#refs/tags/}
+            ;;
+          *)
+            VERSION=develop
+            ;;
+          esac
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo ${VERSION}
+
+      - name: Build
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          earthly +build --VERSION=${VERSION}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          if-no-files-found: error
+          path: |
+            build/*.js
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          fail_on_unmatched_files: true
+          files: |
+            build/*.js

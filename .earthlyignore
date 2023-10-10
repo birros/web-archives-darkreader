@@ -1,0 +1,6 @@
+.git
+.tmp-earthly-out
+build
+darkreader
+.gitignore
+README.md

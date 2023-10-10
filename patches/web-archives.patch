@@ -1,0 +1,136 @@
+diff --git a/src/inject/dynamic-theme/modify-css.ts b/src/inject/dynamic-theme/modify-css.ts
+index a0ec05a2..37190025 100644
+--- a/src/inject/dynamic-theme/modify-css.ts
++++ b/src/inject/dynamic-theme/modify-css.ts
+@@ -169,6 +169,7 @@ function getModifiedScrollbarStyle(theme: Theme) {
+         colorThumbHover = hslToString(lighten(0.1));
+         colorThumbActive = hslToString(lighten(0.2));
+     }
++    /*
+     lines.push('::-webkit-scrollbar {');
+     lines.push(`    background-color: ${colorTrack};`);
+     lines.push(`    color: ${colorIcons};`);
+@@ -190,6 +191,7 @@ function getModifiedScrollbarStyle(theme: Theme) {
+         lines.push(`    scrollbar-color: ${colorThumb} ${colorTrack};`);
+         lines.push('}');
+     }
++    */
+     return lines.join('\n');
+ }
+ 
+diff --git a/src/inject/dynamic-theme/network.ts b/src/inject/dynamic-theme/network.ts
+index 6fcb054c..d77b2d1b 100644
+--- a/src/inject/dynamic-theme/network.ts
++++ b/src/inject/dynamic-theme/network.ts
+@@ -13,10 +13,11 @@ export async function bgFetch(request: FetchRequest) {
+         const id = ++counter;
+         resolvers.set(id, resolve);
+         rejectors.set(id, reject);
+-        chrome.runtime.sendMessage({type: 'fetch', data: request, id});
++        // chrome.runtime.sendMessage({type: 'fetch', data: request, id});
+     });
+ }
+ 
++/*
+ chrome.runtime.onMessage.addListener(({type, data, error, id}) => {
+     if (type === 'fetch-response') {
+         const resolve = resolvers.get(id);
+@@ -30,3 +31,4 @@ chrome.runtime.onMessage.addListener(({type, data, error, id}) => {
+         }
+     }
+ });
++*/
+diff --git a/tasks/bundle-js.js b/tasks/bundle-js.js
+index c161cfcc..06988c99 100644
+--- a/tasks/bundle-js.js
++++ b/tasks/bundle-js.js
+@@ -39,6 +39,7 @@ function patchFirefoxJS(/** @type {string} */code) {
+ 
+ /** @type {JSEntry[]} */
+ const jsEntries = [
++    /*
+     {
+         src: 'src/background/index.ts',
+         dest: 'background/index.js',
+@@ -99,6 +100,16 @@ const jsEntries = [
+         },
+         watchFiles: null,
+     },
++    */
++    {
++        src: 'web-archives/src/darkreader.ts',
++        dest: 'web-archives/build/darkreader.js',
++        reloadType: reload.UI,
++        async postBuild({debug}) {
++            await copyToBrowsers({cwdPath: this.dest, debug});
++        },
++        watchFiles: null,
++    },
+ ];
+ 
+ async function bundleJS(/** @type {JSEntry} */entry, {debug, watch}) {
+@@ -133,6 +144,7 @@ async function bundleJS(/** @type {JSEntry} */entry, {debug, watch}) {
+         strict: true,
+         format: 'iife',
+         sourcemap: debug ? 'inline' : false,
++        name: 'darkreader'
+     });
+     await entry.postBuild({debug});
+ }
+diff --git a/web-archives/src/darkreader.ts b/web-archives/src/darkreader.ts
+new file mode 100644
+index 00000000..52715739
+--- /dev/null
++++ b/web-archives/src/darkreader.ts
+@@ -0,0 +1,51 @@
++import {createOrUpdateDynamicTheme, removeDynamicTheme} from '../../src/inject/dynamic-theme';
++import { DEFAULT_THEME } from '../../src/defaults'
++
++declare global {
++    let darkreader_default: any;
++}
++
++var enabled = false;
++
++if (darkreader_default !== undefined && darkreader_default) {
++    enable ();
++}
++
++export function enable () {
++    if (enabled === true) {
++        return;
++    } else {
++        enabled = true;
++    }
++
++    const data = {
++        filter: DEFAULT_THEME,
++        fixes: {
++            /**
++             * Only for wikipedia.org
++             * see `src/config/dynamic-theme-fixes.config`
++             */
++            url: [],
++            invert: [
++                '.mwe-math-element',
++                '.mw-wiki-logo'
++            ],
++            css: '',
++            ignoreInlineStyle: [],
++            ignoreImageAnalysis: []
++        },
++        isIFrame: false
++    };
++
++    const { filter, fixes, isIFrame } = data;
++    createOrUpdateDynamicTheme(filter, fixes, isIFrame);
++}
++
++export function disable () {
++    if (enabled === false) {
++        return;
++    } else {
++        enabled = false;
++    }
++    removeDynamicTheme();
++}
